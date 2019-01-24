@@ -842,12 +842,14 @@ begin
 			if (dec2if_full='0') then
 				dec2if_push <= '1';
 			end if;
+		-- T2
 		elsif cond = '0' and condv = '1' then 
 			--le predicat est faux
 			next_state <= RUN;
 			if (dec2if_full='0') then
 				dec2if_push <= '1';
 			end if;
+		-- T3
 		elsif cond = '1' and condv = '1' then
 			-- le predicat est vrai
 			if b_i = '1' then
