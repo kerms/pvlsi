@@ -124,3 +124,7 @@ Sinon on revient à `RUN`
  
 ### 5. cycle de gel
 On doit exécuter les instructions dans l'ordre.
+
+# EXE
+### alu
+### shifter
