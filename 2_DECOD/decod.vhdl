@@ -849,6 +849,7 @@ begin
 				dec2if_push <= '1';
 			end if;
 		elsif cond = '1' and condv = '1' then
+			-- le predicat est vrai
 			if b_i = '1' then
 				next_state <= BRANCH;
 				if_pop <= '0';
