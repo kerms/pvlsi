@@ -145,6 +145,7 @@ component reg
 		vss			: in bit);
 end component;
 
+-- dec2exe
 component fifo_127b
 	port(
 		din		: in std_logic_vector(126 downto 0);
@@ -164,6 +165,7 @@ component fifo_127b
 		vss		: in bit
 	);
 end component;
+
 
 component fifo_32b
 	port(
@@ -189,6 +191,7 @@ signal cond		: Std_Logic; -- predicat
 signal condv	: Std_Logic;         -- predicat valid
 signal operv	: Std_Logic;
 
+-- instruction type
 signal regop_t  : Std_Logic;         -- ins de calcule
 signal mult_t   : Std_Logic;         -- ins multiplication
 signal swap_t   : Std_Logic;         -- ins swap
@@ -295,7 +298,7 @@ signal if2dec_pop : Std_Logic;   -- affectation dans la MaE to dec_pop
 -- Exec  operands
 signal op1			: Std_Logic_Vector(31 downto 0);
 signal op2			: Std_Logic_Vector(31 downto 0);
-signal alu_dest	: Std_Logic_Vector(3 downto 0);
+signal alu_dest		: Std_Logic_Vector(3 downto 0);
 signal alu_wb		: Std_Logic;
 signal flag_wb		: Std_Logic;
 
@@ -475,15 +478,37 @@ begin
 
 -- Execution condition
 
-	cond <= '1' when	(if_ir(31 downto 28) = X"0" and zero = '1') or
-							(if_ir(31 downto 28) = X"1" and zero = '0') or
-							....
+	cond <= '1' when	(if_ir(31 downto 28) = X"0" and zero = '1') or -- EQ
+							(if_ir(31 downto 28) = X"1" and zero = '0') or -- NE 
+							(if_ir(31 downto 28) = X"2" and cy = '1') or -- CS
+							(if_ir(31 downto 28) = X"3" and cy = '0') or -- CC 
+							(if_ir(31 downto 28) = X"4" and neg = '1') or -- MI
+							(if_ir(31 downto 28) = X"5" and neg = '0') or -- PL
+							(if_ir(31 downto 28) = X"6" and ovr = '1') or -- VS
+							(if_ir(31 downto 28) = X"7" and ovr = '0') or -- VC
+							(if_ir(31 downto 28) = X"8" and cy = '1' and zero = '0') or -- HI
+							(if_ir(31 downto 28) = X"9" and cy = '0' and zero = '1') or -- LS 
+							(if_ir(31 downto 28) = X"A" and (neg = ovr)) or -- GE
+							(if_ir(31 downto 28) = X"B" and (neg xnor ovr) = '0') or -- LT
+							(if_ir(31 downto 28) = X"C" and zero = '0' and neg = ovr) or -- GT
+							(if_ir(31 downto 28) = X"D" and zero = '1' or (neg xnor ovr) = '0') or -- LE
 							(if_ir(31 downto 28) = X"E") else '0';
 
-	condv <= '1'		when if_ir(31 downto 28) = X"E" else
-				reg_cznv	when (if_ir(31 downto 28) = X"0" or
-									....
-									if_ir(31 downto 28) = X"9") else
+	condv <= '1'		when  if_ir(31 downto 28) = X"E" else
+			reg_cznv	when (if_ir(31 downto 28) = X"0" or
+							  if_ir(31 downto 28) = X"1" or
+							  if_ir(31 downto 28) = X"2" or
+							  if_ir(31 downto 28) = "0011" or -- 3
+							  if_ir(31 downto 28) = "0100" or -- 4
+							  if_ir(31 downto 28) = "0101" or -- 5
+							  if_ir(31 downto 28) = "1000" or -- 8
+							  if_ir(31 downto 28) = X"9") else -- 9
+			reg_vv		when (if_ir(31 downto 28) = "0110" or    -- 6
+							  if_ir(31 downto 28) = "0111") else -- 7 
+			reg_vv and reg_cznv when (if_ir(31 downto 28) = "1010" or -- A
+									  if_ir(31 downto 28) = "1011" or -- B
+							  		  if_ir(31 downto 28) = "1100" or -- C
+									  if_ir(31 downto 28) = "1101" ) else '0'; -- D
 
 
 
@@ -495,105 +520,236 @@ begin
 								if_ir(7 downto 4) = "1001" else '0';
 	swap_t <= '1' when	if_ir(27 downto 23) = "00010" and
 								if_ir(11 downto 4) = "00001001" else '0';
-	....
+	trans_t <= '1' when if_ir(27 downto 26) = "01" and (if_ir(25) xnor '1')='0' else '0';
+
+	mtrans_t <= '1' when if_ir(27 downto 25) = "100" else '0';
+
+	branch_t <= '1' when if_ir(27 downto 25) = "101" else '0';
+	
 
 -- decod regop opcode
-
 	and_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"0" else '0';
-	....
+	eor_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"1" else '0';
+	sub_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"2" else '0';
+	rsb_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"3" else '0';
+	add_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"4" else '0';
+	adc_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"5" else '0';
+	sbc_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"6" else '0';
+	rsc_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"7" else '0';
+	tst_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"8" else '0';
+	teq_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"9" else '0';
+	cmp_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"A" else '0';
+	cmn_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"B" else '0';
+	orr_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"C" else '0';
+	mov_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"D" else '0';
+	bic_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"E" else '0';
+	mvn_i <= '1' when regop_t = '1' and if_ir(24 downto 21) = X"F" else '0';
+
+	
 -- mult instruction
+	mul_i <= '1' when mult_t = '1' and if_ir(21) = '0' else '0';
+	mla_i <= '1' when mult_t = '1' and if_ir(21) = '1' else '0';
 
 -- trans instruction
+	ldr_i  <= '1' when trans_t = '1' and if_ir(22) ='0' and if_ir(20) = '1' else '0';
+	str_i  <= '1' when trans_t = '1' and if_ir(22) ='0' and if_ir(20) = '0' else '0';
+	ldrb_i <= '1' when trans_t = '1' and if_ir(22) ='1' and if_ir(20) = '1' else '0';
+	strb_i <= '1' when trans_t = '1' and if_ir(22) ='1' and if_ir(20) = '0' else '0';
 
 -- mtrans instruction
+	ldm_i <= '1' when mtrans_t = '1' and if_ir(20) = '1' else '0';
+	stm_i <= '1' when mtrans_t = '1' and if_ir(20) = '0' else '0';
 
 -- branch instruction
+	b_i  <= '1' when branch_t = '1' and if_ir(24) = '1' else '0';
+	bl_i <= '1' when branch_t = '1' and if_ir(24) = '0' else '0';
 
 -- Decode interface operands
-	op1 <=	reg_pc		when branch_t = '1'					else
-				....
-				rdata1;
+	
+	op1 <=	reg_pc		when branch_t = '1'	else
+			rdata1 		when mult_t  = '1' or 
+							 regop_t = '1' or 
+							 swap_t  = '1' or 
+							 trans_t = '1' or 
+							 mtrans_t= '1' else 
+			X"00000000"; -- TODO?
 
-	offset32 <=	
+	offset32 <=	"00000000"&if_ir(23 downto 0) when  branch_t = '1' else 
+	"00000000000000000000"&if_ir(11 downto 0) when 	trans_t = '1' and if_ir(25) = '0' else
+		X"00000000";
 
-	op2	<=  ....
-				rdata2;
+	op2	<= offset32  when branch_t = '1' or (trans_t = '1' and if_ir(25) = '0')
+				else rdata2; -- TODO manque immediat
 
-	alu_dest <=	 ..... else
-					if_ir(19 downto 16);
+	-- TODO branchment? mtrans ?
+	alu_dest <=	 if_ir(15 downto 12) when regop_t = '1' or 
+										  swap_t  = '1' or 
+										  (trans_t = '1' and if_ir(21) = '1') else
+				 			"1111" 	 when branch_t= '1' else
+				 if_ir(19 downto 16); -- mult
 
-	alu_wb	<= '1'			when	
-					'0';
 
-	flag_wb	<= 
+	-- TODO
+	alu_wb	<= '1'	when (regop_t = '1' and 
+						 ((tst_i = '1' or 
+						   teq_i = '1' or 
+						   cmp_i = '1' or 
+						   cmn_i = '1' ) = '0') or -- ) = 0 ne marche peut etre pas
+						 mult_t = '1' or 
+						 swap_t = '1' or 
+						 (trans_t = '1' and if_ir(21) = '1') or
+						 (mtrans_t = '1' and if_ir(21) = '1')
+						 )
+				else '0';
+
+	flag_wb	<= '1' when (regop_t = '1' and 
+							(if_ir(20) = '1' or 
+							 tst_i = '1' or 
+							 teq_i = '1' or 
+							 cmp_i = '1' or 
+							 cmn_i = '1' )) or 
+						(mult_t = '1' and if_ir(20) = '1') else 
+						'0';
 
 -- reg read
-	radr1 <= 
-				
-	radr2 <=
 
-	radr3 <=
+	-- Rn
+	radr1 <= if_ir(19 downto 16) when regop_t = '1' or
+									  swap_t  = '1' or
+									  trans_t = '1' or
+									  mtrans_t= '1' else
+			 if_ir(15 downto 12) when mult_t  = '1' else
+			 X"0";
+				
+	-- Rm
+	radr2 <= if_ir(3 downto 0) when (regop_t = '1' and if_ir(25) = '0') or 
+							  		 mult_t  = '1' or 
+									 swap_t  = '1' or 
+									(trans_t = '1' and if_ir(25) = '1') else
+									 X"0";
+
+	-- Rs
+	radr3 <= if_ir(11 downto 8) when (regop_t = '1' and if_ir(25) = '0' and if_ir(4) = '1' and if_ir(7) = '0') or 
+									  mult_t = '1' or 
+									 (trans_t = '1' and if_ir(25) = '1' and if_ir(4) = '1' and if_ir(7) = '0') else
+									 X"0";
 
 -- Reg Invalid
 
-	inval_exe_adr <= ...... else
-							if_ir(15 downto 12);
+	inval_exe_adr <= alu_dest; -- TODO
 
-	inval_exe <=	'1'	when	....
-						'0';
+	inval_exe <= alu_wb;
 
-	inval_mem_adr <=	....
-							mtrans_rd;
+	inval_mem_adr <= if_ir(15 downto 12) when (trans_t = '1' and if_ir(20) = '1') -- load
+				else mtrans_rd;
 
-	inval_mem <=	'1'	when		....		else
-						'0';
+	inval_mem <= '1' when (trans_t = '1' and if_ir(20) = '1')
+					 	  -- (mtrans_nbr > "00000") 
+	 	    else '0'; -- TODO
 
-	inval_czn <=
-			
+	inval_czn <= '1' when (if_ir(20) = '1' and 
+							(mult_t = '1' or regop_t = '1')
+						  ) or 
+						  (regop_t = 1 and 
+						  	(teq_i = '1' or 
+					  		 tst_i = '1' or
+					  		 cmp_i = '1' or
+					  		 cmn_i = '1'))
+			    else '0';
 
-	inval_ovr <=
+	inval_ovr <= '1' when (if_ir(20) = '1' and 
+							(mult_t = '1' or 
+							sub_i = '1' or 
+							rsb_i = '1'	or 
+							add_i = '1' or
+							adc_i = '1' or
+							sbc_i = '1'
+							))
+				else '0';
 
 -- operand validite
 
-	operv <=	'1' when  ...
-				'0';
+	operv <=	'1' when (reg_pcv = '1' and branch_t = '1') else
+		(rvalid3 and rvalid2 and rvalid1) when 
+				(regop_t = '1' and if_ir(25) = '0' and if_ir(4) = '1' and if_ir(7) = '0') or 
+			     mult_t = '1' or 
+				(trans_t = '1' and if_ir(25) = '1' and if_ir(4) = '1' and if_ir(7) = '0') else
+		(rvalid2 and rvalid1) when 
+				(regop_t = '1' and if_ir(25) = '0') or 
+		  		 mult_t  = '1' or 
+				 swap_t  = '1' or 
+				(trans_t = '1' and if_ir(25) = '1') else
+		rvalid1;
 
 -- Decode to mem interface 
-	ld_dest <= 
-	pre_index <=
+	ld_dest <= if_ir(15 downto 12) when trans_t = '1' else mtrans_rd;
+	pre_index <= if_ir(24);
 
-	mem_lw <= 
+	mem_lw <= ldr_i; -- ??
 	mem_lb <= ldrb_i;
-	mem_sw <= 
+	mem_sw <= str_i; -- ??
 	mem_sb <= strb_i;
 
 -- Shifter command
 
-	shift_lsl <=
+	shift_lsl <= '1' when ((regop_t = '1' and if_ir(25) = '0') or
+						   (trans_t = '1' and if_ir(25) = '1')) and 
+						    if_ir(6 downto 5) = "00" else '0';
+	shift_lsr <= '1' when ((regop_t = '1' and if_ir(25) = '0') or
+						   (trans_t = '1' and if_ir(25) = '1')) and 
+							if_ir(6 downto 5) = "01" else '0';
+	shift_asr <= '1' when ((regop_t = '1' and if_ir(25) = '0') or
+						   (trans_t = '1' and if_ir(25) = '1')) and 
+							if_ir(6 downto 5) = "10" else '0';
+	shift_ror <= '1' when ((regop_t = '1' and if_ir(25) = '0') or
+						   (trans_t = '1' and if_ir(25) = '1')) and 
+							if_ir(6 downto 5) = "11" and shift_rrx='0' else '0';
+	shift_rrx <= '1' when ((regop_t = '1' and if_ir(25) = '0') or
+						   (trans_t = '1' and if_ir(25) = '1')) and 
+							if_ir(6 downto 5) = "11" and if_ir(4) = '0' and 
+							if_ir(11 downto 7) = "00000" else '0';
 
-	shift_lsr <=
-	shift_asr <= 
-	shift_ror <=
-	shift_rrx <=
-
-	shift_val <=	"00010"							when branch_t = '1'							else
-
+	shift_val <=	"00010"	when branch_t = '1'	else 
+					if_ir(11 downto 7) when (regop_t = '1' and if_ir(25) = '0' and if_ir(4) = '0') or 
+											(trans_t = '1' and if_ir(25) = '1' and if_ir(4) = '0') else
+					rdata3(4 downto 0) when (regop_t = '1' and if_ir(25) = '0' and if_ir(4) = '1') or
+											(trans_t = '1' and if_ir(25) = '1' and if_ir(4) = '1') else
+					"00000";
+											
 -- Alu operand selection
-	comp_op1	<= '1' when rsb_i = '1' or 
-	comp_op2	<=	'1' when sub_i = '1' or 
+	comp_op1	<= '1' when rsb_i = '1' or rsc_i = '1' else '0';
+	comp_op2	<=	'1' when sub_i = '1' or sbc_i = '1' or cmp_i = '1' or bic_i = '1' or mvn_i = '1' else '0';
 
-	alu_cy <=	'1'				when sub_i = '1' or
+	alu_cy <=	'1'				when sub_i = '1' or rsb_i = '1' or cmp_i = '1' else
+				reg_cry			when adc_i = '1' or sbc_i = '1' or rsc_i = '1' else
+				'0';
 
 -- Alu command
-
-	alu_cmd <=	"11" when ...  else
-					"00";
+  -- 00 ADD
+  -- 01 AND
+  -- 10 OR
+  -- 11 XOR
+				-- xor
+	alu_cmd <=	"11" when eor_i = '1' or
+ 						  mvn_i = '1' or 
+ 						  teq_i = '1'
+	 					else
+	 			-- or
+	 			"10" when mov_i = '1' or
+	 					  orr_i = '1'
+	 						else
+	 			-- and
+	 			"01" when and_i = '1' or
+	 					  bic_i = '1' or 
+	 					  tst_i = '1' 
+	 			-- 
+		   else "00";
 -- Mtrans reg list
 
 	process (ck)
 	begin
 		if (rising_edge(ck)) then
-		....
+		
 		end if;
 	end process;
 
@@ -672,10 +828,55 @@ begin
 		mtrans_loop_adr <= '0';
 
 		if dec2if_full = '0' and reg_pcv = '1' then
-		....
+			next_state <= RUN;
+			dec2if_push <= '1';
+		else
+			next_state <= FETCH;
 		end if;
-			
+	
+	when RUN =>
 
+		-- T1
+		if if2dec_empty = '1' or dec2exe_full = '1' or condv = '0' then
+			next_state <= RUN;
+			if (dec2if_full='0') then
+				dec2if_push <= '1';
+			end if;
+		elsif cond = '0' and condv = '1' then 
+			--le predicat est faux
+			next_state <= RUN;
+			if (dec2if_full='0') then
+				dec2if_push <= '1';
+			end if;
+		elsif cond = '1' and condv = '1' then
+			if b_i = '1' then
+				next_state <= BRANCH;
+				if_pop <= '0';
+			elsif bl_i = '1' then
+				blink <= '1';
+				next_state <= LINK;
+			elsif mtrans_t = '1' then
+				mtrans_loop_adr <= '1';
+				mtrans_mask <= X"0000";
+			else -- cas "normal"
+				if dec2if_full = '0' and reg_pcv = '1' then
+					dec2if_push <= '1';
+				end if;
+				if dec2exe_full = '0' and operv = '1' then
+					dec2exe_push <= '1';
+				end if;
+			end if;
+		else
+			next_state <= RUN;
+		end if;
+
+	when BRANCH => 
+
+	--TODO
+	when LINK => 
+	--TODO
+	when MTRANS => 
+	--TODO
 	
 	end case;
 end process;

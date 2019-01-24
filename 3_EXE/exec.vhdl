@@ -140,7 +140,8 @@ signal shift_dout_s : std_logic_vector(31 downto 0);
 signal shift_cout_s : std_logic;
 signal res_op2_s : std_logic_vector(31 downto 0) ;
 signal res_op1_s : std_logic_vector(31 downto 0) ;
-signal res_exe_cout_s : std_logic_vector(31 downto 0) ;
+signal res_exe_cout_s : std_logic ;
+signal res_exe_res_s : std_logic_vector(31 downto 0);
 
 begin
 --  Component instantiation.
@@ -159,28 +160,24 @@ begin
 		cout      => shift_cout_s,
 		
 		-- global interface
-		vdd       ,
-		vss
+		vdd       => vdd,
+		vss		  => vss
 	);
 
 
-
-	with dec_comp_op2 select
-	res_op2_s <= shift_dout_s when dec_comp_op2='0',
-				not shift_dout_s when others;
+	res_op2_s <= shift_dout_s when dec_comp_op2 = '0' else
+				not shift_dout_s;
 
 
-	with dec_comp_op1 select
-	res_op1_s <= dec_op1 when dec_comp_op2='0',
-				not dec_op1 when others;
-
+	res_op1_s <= dec_op1 when dec_comp_op1 = '0' else
+				not dec_op1;
 
 	alu_inst : alu
-	port map (	dec_op1
-				res_op2_s,
-				dec_alu_cy,
-				dec_alu_cmd,
-				res         => exe_res,
+	port map (	op1 => dec_op1 ,
+				op2 => res_op2_s,
+				cin => dec_alu_cy,
+				cmd => dec_alu_cmd,
+				res         => res_exe_res_s,
 				cout 		=> res_exe_cout_s,
 				v 			=> exe_v, 
 				n			=> exe_n,
@@ -190,17 +187,12 @@ begin
 	);
 
 	-- exe_c histoire de carry avec calcule logique/arithmetique
-	with dec_alu_cmd select
-	exe_c <= res_exe_cout_s when "00",
-		       shift_cout_s when "01",
-		       shift_cout_s when "10",
-		       shift_cout_s when others;
-	
+	exe_c <= res_exe_cout_s when dec_alu_cmd = "00" else
+			 shift_cout_s;
 
 	-- preindexation
-	with dec_pre_index select
-	mem_adr <= exe_res when '1',
-			   dec_op1 when others;
+	mem_adr <= res_exe_res_s when dec_pre_index = '1' else
+			   dec_op1;
 	
 
 	exe_dest <= dec_exe_dest;
@@ -208,15 +200,15 @@ begin
 	exe_flag_wb <= dec_flag_wb;
 
 
-	exe_push <= ((exe2mem_full = '0' or mem_pop = '1'))
-			and (not dec2exe_empty)
+	exe_push <= '1' when ((exe2mem_full = '0' or mem_pop = '1'))
+			and (not dec2exe_empty)='0'
 			and (dec_mem_lw = '1' or
 				 dec_mem_lb = '1' or
 				 dec_mem_sw = '1' or
 				 dec_mem_sb = '1'
-				);
+				) else '0';
 	
-	
+	exe_res <= res_exe_res_s;	
 
 	
 	exec2mem : fifo_72b
